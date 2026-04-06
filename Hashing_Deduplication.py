@@ -13,9 +13,6 @@ class PaperImageDeduplicator:
         self.root = root_folder
         self.log_path = output_log
         self.file_records = []
-        
-        # 初始化用于提取ROI特征的神经网络 (对应论文中的 U-Net Encoder)
-        # 这里使用轻量级预训练模型作为特征提取器的平替
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         resnet = models.resnet18(pretrained=True)
         self.encoder = nn.Sequential(*list(resnet.children())[:-2]).to(self.device)
@@ -70,7 +67,7 @@ class PaperImageDeduplicator:
             return roi_hash / (np.linalg.norm(roi_hash) + 1e-8) # Normalize
 
     def process_image(self, file_path):
-        """处理单张图像，计算三种特征和时间戳"""
+        
         try:
             img = cv2.imread(file_path)
             if img is None: return None
@@ -82,7 +79,7 @@ class PaperImageDeduplicator:
             h_l = self._compute_local_hash(img_gray)
             h_r = self._compute_roi_hash(img_rgb)
             
-            # 获取文件的创建/修改时间 (模拟时间戳)
+            
             timestamp = os.path.getctime(file_path)
             
             return {
@@ -97,18 +94,18 @@ class PaperImageDeduplicator:
             return None
 
     def scan_and_deduplicate(self):
-        """执行扫描和去重"""
+        
         all_images = []
         for root, dirs, files in os.walk(self.root):
             all_images.extend([os.path.join(root, f) for f in files if f.lower().endswith(('.png', '.jpg'))])
         
-        print(f"提取 {len(all_images)} 张图像的特征...")
+        print(f"Extract the features of {len(all_images)} images...")
         for path in all_images:
             record = self.process_image(path)
             if record:
                 self.file_records.append(record)
 
-        # 按照时间戳排序，确保先保留时间靠前的扫描
+        
         self.file_records.sort(key=lambda x: x['time'])
         
         kept_records = []
@@ -118,7 +115,7 @@ class PaperImageDeduplicator:
             for current in self.file_records:
                 is_duplicate = False
                 for kept in kept_records:
-                    # Eq 17 参数计算
+                    
                     delta_t_hours = abs(current['time'] - kept['time']) / 3600.0
                     l2_dist = np.linalg.norm(current['h_r'] - kept['h_r']) ** 2
                     
@@ -138,7 +135,7 @@ class PaperImageDeduplicator:
                     kept_records.append(current)
                 else:
                     removed_files.append(current['path'])
-                    # 移动到备份文件夹或删除
+                    
                     backup_path = current['path'] + ".bak"
                     shutil.move(current['path'], backup_path)
                     
@@ -147,4 +144,4 @@ class PaperImageDeduplicator:
 if __name__ == "__main__":
     deduplicator = PaperImageDeduplicator(r"C:\Users\20253\Desktop\hip_joints")
     removed = deduplicator.scan_and_deduplicate()
-    print(f"完成去重！拦截了 {len(removed)} 个文件，日志见 {deduplicator.log_path}")
+    print(f"Deduplication done! {len(removed)} files were blocked, see log {deduplicator.log_path}")
